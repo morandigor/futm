@@ -746,6 +746,12 @@ export default function FutmApp() {
     return <span style={{display:'inline-block',fontSize:10,padding:'2px 8px',borderRadius:20,fontWeight:700,fontFamily:'var(--font)',letterSpacing:'.5px',textTransform:'uppercase',...s[variant]}}>{children}</span>
   }
 
+
+  const navItems:[Page,string,string][]=[
+    ['home','ti-home','Início'],['match','ti-ball-football','Partida'],['drills','ti-run','Drills'],
+    ['ranking','ti-trophy','Ranking'],['standings','ti-table','Tabela'],['jogos','ti-calendar-event','Jogos'],['shop','ti-shopping-bag','Loja'],['calendar','ti-calendar','Calendário'],['profile','ti-user','Perfil'],
+  ]
+
   if(!loggedIn) return(
     <div style={{position:'fixed',inset:0,background:'var(--bg)',display:'flex',alignItems:'center',justifyContent:'center',
       backgroundImage:'radial-gradient(ellipse at 20% 50%,rgba(0,214,143,.06) 0%,transparent 60%)'}}>
@@ -814,10 +820,6 @@ export default function FutmApp() {
     </div>
   )
 
-  const navItems:[Page,string,string][]=[
-    ['home','ti-home','Início'],['match','ti-ball-football','Partida'],['drills','ti-run','Drills'],
-    ['ranking','ti-trophy','Ranking'],['standings','ti-table','Tabela'],['jogos','ti-calendar-event','Jogos'],['shop','ti-shopping-bag','Loja'],['calendar','ti-calendar','Calendário'],['profile','ti-user','Perfil'],
-  ]
 
   return(
     <div style={{display:'flex',height:'100vh',minHeight:600}}>
