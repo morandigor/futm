@@ -752,8 +752,7 @@ export default function FutmApp() {
     ['ranking','ti-trophy','Ranking'],['standings','ti-table','Tabela'],['jogos','ti-calendar-event','Jogos'],['shop','ti-shopping-bag','Loja'],['calendar','ti-calendar','Calendário'],['profile','ti-user','Perfil'],
   ]
 
-  return !loggedIn ? (
-    <>
+  if (!loggedIn) return (
     <div style={{position:'fixed',inset:0,background:'var(--bg)',display:'flex',alignItems:'center',justifyContent:'center',
       backgroundImage:'radial-gradient(ellipse at 20% 50%,rgba(0,214,143,.06) 0%,transparent 60%)'}}>
       <div style={{width:380,background:'var(--card)',border:'1px solid var(--border2)',borderRadius:16,padding:32,position:'relative',overflow:'hidden',maxHeight:'92vh',overflowY:'auto'}}>
@@ -819,9 +818,9 @@ export default function FutmApp() {
         </div>
       </div>
     </div>
-    </>
-  ) : (
-    <>
+  )
+
+  return (
     <div style={{display:'flex',height:'100vh',minHeight:600}}>
       <div style={{width:200,flexShrink:0,background:'var(--bg2)',borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column'}}>
         <div style={{padding:'20px 16px 14px',fontFamily:'var(--font)',fontSize:22,fontWeight:800,letterSpacing:2,textTransform:'uppercase',borderBottom:'1px solid var(--border)'}}>
@@ -1269,7 +1268,7 @@ export default function FutmApp() {
           </div>
         )}
 
-        {/* TABELA DO BRASILEIRÃO */
+        {/* TABELA DO BRASILEIRÃO */}
         {page==='standings'&&(
           <div>
             <div style={{fontFamily:'var(--font)',fontSize:24,fontWeight:800,letterSpacing:1,textTransform:'uppercase',marginBottom:16}}>Tabela do Brasileirão</div>
@@ -1330,6 +1329,5 @@ export default function FutmApp() {
       )}
       <style>{`@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.3;transform:scale(.7)}}`}</style>
     </div>
-    </>
   )
 }
