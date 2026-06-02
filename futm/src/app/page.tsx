@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase, type Profile } from '@/lib/supabase'
 
-type Page = 'home'|'match'|'drills'|'ranking'|'shop'|'calendar'|'profile'|'standings'
+type Page = 'home'|'match'|'drills'|'ranking'|'shop'|'calendar'|'profile'|'standings'|'jogos'
 type RankEntry = { username: string; team: string; goals_season: number; goals_today: number; position: number }
 
 const TEAMS = [
@@ -27,6 +27,63 @@ const TEAMS = [
   {id:'remo',name:'Remo',abbr:'REM',primary:'#0033CC',secondary:'#FFFFFF'},
   {id:'chapecoense',name:'Chapecoense',abbr:'CHP',primary:'#006400',secondary:'#FFFFFF'},
 ]
+
+
+// All 38 rounds — round robin ida e volta
+const ALL_FIXTURES: {home:string,away:string}[][] = [
+  [{home:'palmeiras',away:'chapecoense'},{home:'flamengo',away:'remo'},{home:'fluminense',away:'mirassol'},{home:'saopaulo',away:'santos'},{home:'athletico',away:'internacional'},{home:'bahia',away:'atleticomg'},{home:'coritiba',away:'corinthians'},{home:'botafogo',away:'vitoria'},{home:'bragantino',away:'cruzeiro'},{home:'vasco',away:'gremio'}],
+  [{home:'palmeiras',away:'remo'},{home:'chapecoense',away:'mirassol'},{home:'flamengo',away:'santos'},{home:'fluminense',away:'internacional'},{home:'saopaulo',away:'atleticomg'},{home:'athletico',away:'corinthians'},{home:'bahia',away:'vitoria'},{home:'coritiba',away:'cruzeiro'},{home:'botafogo',away:'gremio'},{home:'bragantino',away:'vasco'}],
+  [{home:'palmeiras',away:'mirassol'},{home:'remo',away:'santos'},{home:'chapecoense',away:'internacional'},{home:'flamengo',away:'atleticomg'},{home:'fluminense',away:'corinthians'},{home:'saopaulo',away:'vitoria'},{home:'athletico',away:'cruzeiro'},{home:'bahia',away:'gremio'},{home:'coritiba',away:'vasco'},{home:'botafogo',away:'bragantino'}],
+  [{home:'palmeiras',away:'santos'},{home:'mirassol',away:'internacional'},{home:'remo',away:'atleticomg'},{home:'chapecoense',away:'corinthians'},{home:'flamengo',away:'vitoria'},{home:'fluminense',away:'cruzeiro'},{home:'saopaulo',away:'gremio'},{home:'athletico',away:'vasco'},{home:'bahia',away:'bragantino'},{home:'coritiba',away:'botafogo'}],
+  [{home:'palmeiras',away:'internacional'},{home:'santos',away:'atleticomg'},{home:'mirassol',away:'corinthians'},{home:'remo',away:'vitoria'},{home:'chapecoense',away:'cruzeiro'},{home:'flamengo',away:'gremio'},{home:'fluminense',away:'vasco'},{home:'saopaulo',away:'bragantino'},{home:'athletico',away:'botafogo'},{home:'bahia',away:'coritiba'}],
+  [{home:'palmeiras',away:'atleticomg'},{home:'internacional',away:'corinthians'},{home:'santos',away:'vitoria'},{home:'mirassol',away:'cruzeiro'},{home:'remo',away:'gremio'},{home:'chapecoense',away:'vasco'},{home:'flamengo',away:'bragantino'},{home:'fluminense',away:'botafogo'},{home:'saopaulo',away:'coritiba'},{home:'athletico',away:'bahia'}],
+  [{home:'palmeiras',away:'corinthians'},{home:'atleticomg',away:'vitoria'},{home:'internacional',away:'cruzeiro'},{home:'santos',away:'gremio'},{home:'mirassol',away:'vasco'},{home:'remo',away:'bragantino'},{home:'chapecoense',away:'botafogo'},{home:'flamengo',away:'coritiba'},{home:'fluminense',away:'bahia'},{home:'saopaulo',away:'athletico'}],
+  [{home:'palmeiras',away:'vitoria'},{home:'corinthians',away:'cruzeiro'},{home:'atleticomg',away:'gremio'},{home:'internacional',away:'vasco'},{home:'santos',away:'bragantino'},{home:'mirassol',away:'botafogo'},{home:'remo',away:'coritiba'},{home:'chapecoense',away:'bahia'},{home:'flamengo',away:'athletico'},{home:'fluminense',away:'saopaulo'}],
+  [{home:'palmeiras',away:'cruzeiro'},{home:'vitoria',away:'gremio'},{home:'corinthians',away:'vasco'},{home:'atleticomg',away:'bragantino'},{home:'internacional',away:'botafogo'},{home:'santos',away:'coritiba'},{home:'mirassol',away:'bahia'},{home:'remo',away:'athletico'},{home:'chapecoense',away:'saopaulo'},{home:'flamengo',away:'fluminense'}],
+  [{home:'palmeiras',away:'gremio'},{home:'cruzeiro',away:'vasco'},{home:'vitoria',away:'bragantino'},{home:'corinthians',away:'botafogo'},{home:'atleticomg',away:'coritiba'},{home:'internacional',away:'bahia'},{home:'santos',away:'athletico'},{home:'mirassol',away:'saopaulo'},{home:'remo',away:'fluminense'},{home:'chapecoense',away:'flamengo'}],
+  [{home:'palmeiras',away:'vasco'},{home:'gremio',away:'bragantino'},{home:'cruzeiro',away:'botafogo'},{home:'vitoria',away:'coritiba'},{home:'corinthians',away:'bahia'},{home:'atleticomg',away:'athletico'},{home:'internacional',away:'saopaulo'},{home:'santos',away:'fluminense'},{home:'mirassol',away:'flamengo'},{home:'remo',away:'chapecoense'}],
+  [{home:'palmeiras',away:'bragantino'},{home:'vasco',away:'botafogo'},{home:'gremio',away:'coritiba'},{home:'cruzeiro',away:'bahia'},{home:'vitoria',away:'athletico'},{home:'corinthians',away:'saopaulo'},{home:'atleticomg',away:'fluminense'},{home:'internacional',away:'flamengo'},{home:'santos',away:'chapecoense'},{home:'mirassol',away:'remo'}],
+  [{home:'palmeiras',away:'botafogo'},{home:'bragantino',away:'coritiba'},{home:'vasco',away:'bahia'},{home:'gremio',away:'athletico'},{home:'cruzeiro',away:'saopaulo'},{home:'vitoria',away:'fluminense'},{home:'corinthians',away:'flamengo'},{home:'atleticomg',away:'chapecoense'},{home:'internacional',away:'remo'},{home:'santos',away:'mirassol'}],
+  [{home:'palmeiras',away:'coritiba'},{home:'botafogo',away:'bahia'},{home:'bragantino',away:'athletico'},{home:'vasco',away:'saopaulo'},{home:'gremio',away:'fluminense'},{home:'cruzeiro',away:'flamengo'},{home:'vitoria',away:'chapecoense'},{home:'corinthians',away:'remo'},{home:'atleticomg',away:'mirassol'},{home:'internacional',away:'santos'}],
+  [{home:'palmeiras',away:'bahia'},{home:'coritiba',away:'athletico'},{home:'botafogo',away:'saopaulo'},{home:'bragantino',away:'fluminense'},{home:'vasco',away:'flamengo'},{home:'gremio',away:'chapecoense'},{home:'cruzeiro',away:'remo'},{home:'vitoria',away:'mirassol'},{home:'corinthians',away:'santos'},{home:'atleticomg',away:'internacional'}],
+  [{home:'palmeiras',away:'athletico'},{home:'bahia',away:'saopaulo'},{home:'coritiba',away:'fluminense'},{home:'botafogo',away:'flamengo'},{home:'bragantino',away:'chapecoense'},{home:'vasco',away:'remo'},{home:'gremio',away:'mirassol'},{home:'cruzeiro',away:'santos'},{home:'vitoria',away:'internacional'},{home:'corinthians',away:'atleticomg'}],
+  [{home:'palmeiras',away:'saopaulo'},{home:'athletico',away:'fluminense'},{home:'bahia',away:'flamengo'},{home:'coritiba',away:'chapecoense'},{home:'botafogo',away:'remo'},{home:'bragantino',away:'mirassol'},{home:'vasco',away:'santos'},{home:'gremio',away:'internacional'},{home:'cruzeiro',away:'atleticomg'},{home:'vitoria',away:'corinthians'}],
+  [{home:'palmeiras',away:'fluminense'},{home:'saopaulo',away:'flamengo'},{home:'athletico',away:'chapecoense'},{home:'bahia',away:'remo'},{home:'coritiba',away:'mirassol'},{home:'botafogo',away:'santos'},{home:'bragantino',away:'internacional'},{home:'vasco',away:'atleticomg'},{home:'gremio',away:'corinthians'},{home:'cruzeiro',away:'vitoria'}],
+  [{home:'palmeiras',away:'flamengo'},{home:'fluminense',away:'chapecoense'},{home:'saopaulo',away:'remo'},{home:'athletico',away:'mirassol'},{home:'bahia',away:'santos'},{home:'coritiba',away:'internacional'},{home:'botafogo',away:'atleticomg'},{home:'bragantino',away:'corinthians'},{home:'vasco',away:'vitoria'},{home:'gremio',away:'cruzeiro'}],
+  [{home:'chapecoense',away:'palmeiras'},{home:'remo',away:'flamengo'},{home:'mirassol',away:'fluminense'},{home:'santos',away:'saopaulo'},{home:'internacional',away:'athletico'},{home:'atleticomg',away:'bahia'},{home:'corinthians',away:'coritiba'},{home:'vitoria',away:'botafogo'},{home:'cruzeiro',away:'bragantino'},{home:'gremio',away:'vasco'}],
+  [{home:'remo',away:'palmeiras'},{home:'mirassol',away:'chapecoense'},{home:'santos',away:'flamengo'},{home:'internacional',away:'fluminense'},{home:'atleticomg',away:'saopaulo'},{home:'corinthians',away:'athletico'},{home:'vitoria',away:'bahia'},{home:'cruzeiro',away:'coritiba'},{home:'gremio',away:'botafogo'},{home:'vasco',away:'bragantino'}],
+  [{home:'mirassol',away:'palmeiras'},{home:'santos',away:'remo'},{home:'internacional',away:'chapecoense'},{home:'atleticomg',away:'flamengo'},{home:'corinthians',away:'fluminense'},{home:'vitoria',away:'saopaulo'},{home:'cruzeiro',away:'athletico'},{home:'gremio',away:'bahia'},{home:'vasco',away:'coritiba'},{home:'bragantino',away:'botafogo'}],
+  [{home:'santos',away:'palmeiras'},{home:'internacional',away:'mirassol'},{home:'atleticomg',away:'remo'},{home:'corinthians',away:'chapecoense'},{home:'vitoria',away:'flamengo'},{home:'cruzeiro',away:'fluminense'},{home:'gremio',away:'saopaulo'},{home:'vasco',away:'athletico'},{home:'bragantino',away:'bahia'},{home:'botafogo',away:'coritiba'}],
+  [{home:'internacional',away:'palmeiras'},{home:'atleticomg',away:'santos'},{home:'corinthians',away:'mirassol'},{home:'vitoria',away:'remo'},{home:'cruzeiro',away:'chapecoense'},{home:'gremio',away:'flamengo'},{home:'vasco',away:'fluminense'},{home:'bragantino',away:'saopaulo'},{home:'botafogo',away:'athletico'},{home:'coritiba',away:'bahia'}],
+  [{home:'atleticomg',away:'palmeiras'},{home:'corinthians',away:'internacional'},{home:'vitoria',away:'santos'},{home:'cruzeiro',away:'mirassol'},{home:'gremio',away:'remo'},{home:'vasco',away:'chapecoense'},{home:'bragantino',away:'flamengo'},{home:'botafogo',away:'fluminense'},{home:'coritiba',away:'saopaulo'},{home:'bahia',away:'athletico'}],
+  [{home:'corinthians',away:'palmeiras'},{home:'vitoria',away:'atleticomg'},{home:'cruzeiro',away:'internacional'},{home:'gremio',away:'santos'},{home:'vasco',away:'mirassol'},{home:'bragantino',away:'remo'},{home:'botafogo',away:'chapecoense'},{home:'coritiba',away:'flamengo'},{home:'bahia',away:'fluminense'},{home:'athletico',away:'saopaulo'}],
+  [{home:'vitoria',away:'palmeiras'},{home:'cruzeiro',away:'corinthians'},{home:'gremio',away:'atleticomg'},{home:'vasco',away:'internacional'},{home:'bragantino',away:'santos'},{home:'botafogo',away:'mirassol'},{home:'coritiba',away:'remo'},{home:'bahia',away:'chapecoense'},{home:'athletico',away:'flamengo'},{home:'saopaulo',away:'fluminense'}],
+  [{home:'cruzeiro',away:'palmeiras'},{home:'gremio',away:'vitoria'},{home:'vasco',away:'corinthians'},{home:'bragantino',away:'atleticomg'},{home:'botafogo',away:'internacional'},{home:'coritiba',away:'santos'},{home:'bahia',away:'mirassol'},{home:'athletico',away:'remo'},{home:'saopaulo',away:'chapecoense'},{home:'fluminense',away:'flamengo'}],
+  [{home:'gremio',away:'palmeiras'},{home:'vasco',away:'cruzeiro'},{home:'bragantino',away:'vitoria'},{home:'botafogo',away:'corinthians'},{home:'coritiba',away:'atleticomg'},{home:'bahia',away:'internacional'},{home:'athletico',away:'santos'},{home:'saopaulo',away:'mirassol'},{home:'fluminense',away:'remo'},{home:'flamengo',away:'chapecoense'}],
+  [{home:'vasco',away:'palmeiras'},{home:'bragantino',away:'gremio'},{home:'botafogo',away:'cruzeiro'},{home:'coritiba',away:'vitoria'},{home:'bahia',away:'corinthians'},{home:'athletico',away:'atleticomg'},{home:'saopaulo',away:'internacional'},{home:'fluminense',away:'santos'},{home:'flamengo',away:'mirassol'},{home:'chapecoense',away:'remo'}],
+  [{home:'bragantino',away:'palmeiras'},{home:'botafogo',away:'vasco'},{home:'coritiba',away:'gremio'},{home:'bahia',away:'cruzeiro'},{home:'athletico',away:'vitoria'},{home:'saopaulo',away:'corinthians'},{home:'fluminense',away:'atleticomg'},{home:'flamengo',away:'internacional'},{home:'chapecoense',away:'santos'},{home:'remo',away:'mirassol'}],
+  [{home:'botafogo',away:'palmeiras'},{home:'coritiba',away:'bragantino'},{home:'bahia',away:'vasco'},{home:'athletico',away:'gremio'},{home:'saopaulo',away:'cruzeiro'},{home:'fluminense',away:'vitoria'},{home:'flamengo',away:'corinthians'},{home:'chapecoense',away:'atleticomg'},{home:'remo',away:'internacional'},{home:'mirassol',away:'santos'}],
+  [{home:'coritiba',away:'palmeiras'},{home:'bahia',away:'botafogo'},{home:'athletico',away:'bragantino'},{home:'saopaulo',away:'vasco'},{home:'fluminense',away:'gremio'},{home:'flamengo',away:'cruzeiro'},{home:'chapecoense',away:'vitoria'},{home:'remo',away:'corinthians'},{home:'mirassol',away:'atleticomg'},{home:'santos',away:'internacional'}],
+  [{home:'bahia',away:'palmeiras'},{home:'athletico',away:'coritiba'},{home:'saopaulo',away:'botafogo'},{home:'fluminense',away:'bragantino'},{home:'flamengo',away:'vasco'},{home:'chapecoense',away:'gremio'},{home:'remo',away:'cruzeiro'},{home:'mirassol',away:'vitoria'},{home:'santos',away:'corinthians'},{home:'internacional',away:'atleticomg'}],
+  [{home:'athletico',away:'palmeiras'},{home:'saopaulo',away:'bahia'},{home:'fluminense',away:'coritiba'},{home:'flamengo',away:'botafogo'},{home:'chapecoense',away:'bragantino'},{home:'remo',away:'vasco'},{home:'mirassol',away:'gremio'},{home:'santos',away:'cruzeiro'},{home:'internacional',away:'vitoria'},{home:'atleticomg',away:'corinthians'}],
+  [{home:'saopaulo',away:'palmeiras'},{home:'fluminense',away:'athletico'},{home:'flamengo',away:'bahia'},{home:'chapecoense',away:'coritiba'},{home:'remo',away:'botafogo'},{home:'mirassol',away:'bragantino'},{home:'santos',away:'vasco'},{home:'internacional',away:'gremio'},{home:'atleticomg',away:'cruzeiro'},{home:'corinthians',away:'vitoria'}],
+  [{home:'fluminense',away:'palmeiras'},{home:'flamengo',away:'saopaulo'},{home:'chapecoense',away:'athletico'},{home:'remo',away:'bahia'},{home:'mirassol',away:'coritiba'},{home:'santos',away:'botafogo'},{home:'internacional',away:'bragantino'},{home:'atleticomg',away:'vasco'},{home:'corinthians',away:'gremio'},{home:'vitoria',away:'cruzeiro'}],
+  [{home:'flamengo',away:'palmeiras'},{home:'chapecoense',away:'fluminense'},{home:'remo',away:'saopaulo'},{home:'mirassol',away:'athletico'},{home:'santos',away:'bahia'},{home:'internacional',away:'coritiba'},{home:'atleticomg',away:'botafogo'},{home:'corinthians',away:'bragantino'},{home:'vitoria',away:'vasco'},{home:'cruzeiro',away:'gremio'}],
+]
+
+// Get current round number (1-38) based on match weeks since season start
+function getCurrentRound(): number {
+  // Season started Jan 28, 2026. Each week has 2 match days (Tue+Sat) = 1 round per week approximately
+  const seasonStart = new Date('2026-01-28T00:00:00Z').getTime()
+  const now = Date.now()
+  const weeksSinceStart = Math.floor((now - seasonStart) / (7 * 24 * 60 * 60 * 1000))
+  return Math.min(38, Math.max(1, weeksSinceStart + 1))
+}
+
+function getCurrentFixtures() {
+  const round = getCurrentRound()
+  return { fixtures: ALL_FIXTURES[round - 1], round }
+}
 
 // Standings data — baseado no Brasileirão 2026 (atualizado rodada 13)
 const STANDINGS = [
@@ -364,12 +421,17 @@ export default function FutmApp() {
   // keep profileRef in sync
   useEffect(() => { profileRef.current = profile }, [profile])
 
-  function pickOpponent(teamId: string, username: string = '') {
+  // Get opponent from fixtures — everyone on same team faces same opponent
+  function getOpponentFromFixtures(teamId: string) {
+    const { fixtures } = getCurrentFixtures()
+    const fixture = fixtures.find(f => f.home === teamId || f.away === teamId)
+    if (fixture) {
+      const oppId = fixture.home === teamId ? fixture.away : fixture.home
+      return TEAMS.find(t => t.id === oppId) || TEAMS[1]
+    }
+    // fallback if team not in fixtures
     const others = TEAMS.filter(t => t.id !== teamId)
-    // Deterministic: same opponent all week for same user
-    const week = Math.floor(Date.now() / (7 * 24 * 60 * 60 * 1000))
-    const seed = (username.split('').reduce((a,c) => a + c.charCodeAt(0), 0) + week) % others.length
-    return others[seed]
+    return others[0]
   }
 
   async function doLogin() {
@@ -416,7 +478,7 @@ export default function FutmApp() {
         const remaining = Math.max(0, 5400 - elapsed)
         if (remaining > 0) {
           const p = profileRef.current
-          const opp = pickOpponent(p?.team || 'palmeiras', p?.username || '')
+          const opp = getOpponentFromFixtures(p?.team || 'palmeiras')
           setOpponent(opp)
           setMatchRunning(true)
           setMatchTime(remaining)
@@ -440,9 +502,15 @@ export default function FutmApp() {
       setProfile(data as Profile)
       setDrillsDone(data.drills_done||[])
       setLoggedIn(true)
-      // pick opponent different from player's team
-      setOpponent(pickOpponent(data.team || 'palmeiras', data.username || ''))
+      setOpponent(getOpponentFromFixtures(data.team || 'palmeiras'))
       loadRanking()
+      // Restore match state if there was an active match
+      if (data.match_active) {
+        setScoreH(data.match_score_h || 0)
+        setScoreA(data.match_score_a || 0)
+        setAcertos(data.match_acertos || 0)
+        setErros(data.match_erros || 0)
+      }
     }
   }
 
@@ -460,12 +528,15 @@ export default function FutmApp() {
   function startMatch() {
     if (matchRunning) return
     const p = profileRef.current
-    const opp = pickOpponent(p?.team || 'palmeiras', p?.username || '')
+    const opp = getOpponentFromFixtures(p?.team || 'palmeiras')
     setOpponent(opp)
     setMatchRunning(true); setMatchTime(5400)
     setScoreH(0); setScoreA(0); setAcertos(0); setErros(0)
     setMatchPhase('1º Tempo')
     setFeed([{msg:'Apito inicial! A partida começou.',cls:''}])
+    // Reset match state in DB
+    const pStart = profileRef.current
+    if(pStart) saveProfile({match_score_h:0,match_score_a:0,match_acertos:0,match_erros:0,match_active:true})
     cdRef.current = {penalti:0,falta:0,auto:0,escanteio:0}
     setCooldowns({penalti:0,falta:0,auto:0,escanteio:0})
     if (matchRef.current) clearInterval(matchRef.current)
@@ -492,18 +563,29 @@ export default function FutmApp() {
         setScoreH(h=>{ setScoreA(a=>{
           const r=h>a?'Vitória! 🏆':h<a?'Derrota. 😔':'Empate.'
           addFeedItem('Fim! '+r+' Placar: '+h+' × '+a,h>=a?'g':'m')
-          // goals already saved per-shot — just save prize money
+          // goals already saved per-shot — just save prize and clear match state
           const p = profileRef.current
           if(p) {
             const prize = h>a ? Math.floor(50000*(1+(p.attr_forca-50)/100)) : 10000
-            saveProfile({ money: (p.money||0)+prize })
-              .then(() => loadRanking())
+            saveProfile({
+              money: (p.money||0)+prize,
+              match_active: false,
+              match_score_h: 0,
+              match_score_a: 0,
+              match_acertos: 0,
+              match_erros: 0,
+            }).then(() => loadRanking())
           }
           return a
         }); return h })
         return 0
       }
-      if(Math.random()<0.02) setScoreA(a=>{addFeedItem('Gol do adversário!','m');return a+1})
+      if(Math.random()<0.02) setScoreA(a=>{
+        addFeedItem('Gol do adversário!','m')
+        const p2=profileRef.current
+        if(p2) saveProfile({match_score_a:(p2.match_score_a||0)+1, match_active:true})
+        return a+1
+      })
       cdRef.current={
         penalti:Math.max(0,cdRef.current.penalti-1),
         falta:Math.max(0,cdRef.current.falta-1),
@@ -532,16 +614,21 @@ export default function FutmApp() {
       setAcertos(a=>a+1); setScoreH(h=>h+1)
       addFeedItem(pick(SHOOT_MSGS.hit),'g')
       // save each goal immediately to DB — ranking updates in real time
+      const newScoreH = (p.match_score_h || 0) + 1
       const updates = {
         acertos: p.acertos+1,
         goals_today: p.goals_today+1,
         goals_season: p.goals_season+1,
+        match_score_h: newScoreH,
+        match_acertos: (p.match_acertos || 0) + 1,
+        match_active: true,
       }
       await saveProfile(updates)
       loadRanking()
     } else {
       setErros(e=>e+1); addFeedItem(pick(SHOOT_MSGS.miss),'m')
-      await saveProfile({ erros:p.erros+1 })
+      const p2 = profileRef.current
+      if(p2) await saveProfile({ erros:p2.erros+1, match_erros:(p2.match_erros||0)+1, match_active:true })
     }
   }
 
@@ -729,7 +816,7 @@ export default function FutmApp() {
 
   const navItems:[Page,string,string][]=[
     ['home','ti-home','Início'],['match','ti-ball-football','Partida'],['drills','ti-run','Drills'],
-    ['ranking','ti-trophy','Ranking'],['standings','ti-table','Tabela'],['shop','ti-shopping-bag','Loja'],['calendar','ti-calendar','Calendário'],['profile','ti-user','Perfil'],
+    ['ranking','ti-trophy','Ranking'],['standings','ti-table','Tabela'],['jogos','ti-calendar-event','Jogos'],['shop','ti-shopping-bag','Loja'],['calendar','ti-calendar','Calendário'],['profile','ti-user','Perfil'],
   ]
 
   return(
@@ -1131,7 +1218,56 @@ export default function FutmApp() {
           </div>
         )}
 
-        {/* TABELA DO BRASILEIRÃO */}
+        {/* JOGOS DA RODADA */}
+        {page==='jogos'&&(
+          <div>
+            <div style={{fontFamily:'var(--font)',fontSize:24,fontWeight:800,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Jogos da Rodada</div>
+            <div style={{fontSize:12,color:'var(--txt2)',marginBottom:16}}>Rodada {getCurrentFixtures().round} de 38 — toda Terça e Sábado às 19:00 Brasília</div>
+            <div style={{display:'flex',flexDirection:'column',gap:8}}>
+              {getCurrentFixtures().fixtures.map((f,i)=>{
+                const home = TEAMS.find(t=>t.id===f.home)!
+                const away = TEAMS.find(t=>t.id===f.away)!
+                const isPlayerGame = p?.team===f.home || p?.team===f.away
+                const status = getLondonMatchStatus()
+                const isLive = status.isMatchTime
+                return(
+                  <div key={i} style={{
+                    background:isPlayerGame?'rgba(0,214,143,.08)':'var(--card)',
+                    border:`1px solid ${isPlayerGame?'rgba(0,214,143,.4)':'var(--border)'}`,
+                    borderRadius:12,padding:'14px 16px',
+                    display:'flex',alignItems:'center',gap:12
+                  }}>
+                    {/* Home team */}
+                    <div style={{flex:1,display:'flex',alignItems:'center',gap:10,justifyContent:'flex-end'}}>
+                      <span style={{fontFamily:'var(--font)',fontSize:13,fontWeight:700,letterSpacing:'.3px',textTransform:'uppercase',textAlign:'right',color:p?.team===f.home?'var(--g)':'var(--txt)'}}>{home.name}</span>
+                      <MiniShirt primary={home.primary} secondary={home.secondary} size={36}/>
+                    </div>
+                    {/* Score / status */}
+                    <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:4,minWidth:80}}>
+                      {isLive?(
+                        <div style={{display:'flex',alignItems:'center',gap:6,background:'rgba(0,214,143,.15)',border:'1px solid rgba(0,214,143,.4)',borderRadius:20,padding:'3px 10px'}}>
+                          <div style={{width:6,height:6,borderRadius:'50%',background:'var(--g)',animation:'pulse 1.5s infinite'}}/>
+                          <span style={{fontFamily:'var(--font)',fontSize:11,fontWeight:700,color:'var(--g)',letterSpacing:'.5px'}}>AO VIVO</span>
+                        </div>
+                      ):(
+                        <span style={{fontFamily:'var(--font)',fontSize:11,fontWeight:700,color:'var(--txt3)',letterSpacing:'.5px',textTransform:'uppercase'}}>19:00</span>
+                      )}
+                      <span style={{fontSize:10,color:'var(--txt3)'}}>Ter · Sáb</span>
+                      {isPlayerGame&&<span style={{fontSize:9,color:'var(--g)',fontFamily:'var(--font)',fontWeight:700,letterSpacing:'.5px',textTransform:'uppercase'}}>SEU JOGO</span>}
+                    </div>
+                    {/* Away team */}
+                    <div style={{flex:1,display:'flex',alignItems:'center',gap:10}}>
+                      <MiniShirt primary={away.primary} secondary={away.secondary} size={36}/>
+                      <span style={{fontFamily:'var(--font)',fontSize:13,fontWeight:700,letterSpacing:'.3px',textTransform:'uppercase',color:p?.team===f.away?'var(--g)':'var(--txt)'}}>{away.name}</span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* TABELA DO BRASILEIRÃO */
         {page==='standings'&&(
           <div>
             <div style={{fontFamily:'var(--font)',fontSize:24,fontWeight:800,letterSpacing:1,textTransform:'uppercase',marginBottom:16}}>Tabela do Brasileirão</div>

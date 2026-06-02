@@ -20,4 +20,9 @@ export type Profile = {
   drills_done: string[]
   money: number
   vip_days: number
+  match_score_h: number
+  match_score_a: number
+  match_acertos: number
+  match_erros: number
+  match_active: boolean
 }
