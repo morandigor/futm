@@ -486,6 +486,7 @@ export default function FutmApp() {
           setFeed([{msg:'⚽ Partida em andamento! Você entrou no jogo.',cls:'f'}])
           cdRef.current = {penalti:0,falta:0,auto:0,escanteio:0}
           setCooldowns({penalti:0,falta:0,auto:0,escanteio:0})
+          if (matchRef.current) { clearInterval(matchRef.current); matchRef.current = null }
           matchRef.current = setInterval(tickMatch, 1000)
         }
       }
@@ -510,6 +511,14 @@ export default function FutmApp() {
         setScoreA(data.match_score_a || 0)
         setAcertos(data.match_acertos || 0)
         setErros(data.match_erros || 0)
+        // restore cooldowns
+        try {
+          const savedCds = data.match_cooldowns ? JSON.parse(data.match_cooldowns) : null
+          if (savedCds) {
+            cdRef.current = savedCds
+            setCooldowns({...savedCds})
+          }
+        } catch(e) {}
       }
     }
   }
@@ -536,11 +545,12 @@ export default function FutmApp() {
     setFeed([{msg:'Apito inicial! A partida começou.',cls:''}])
     // Reset match state in DB
     const pStart = profileRef.current
-    if(pStart) saveProfile({match_score_h:0,match_score_a:0,match_acertos:0,match_erros:0,match_active:true})
+    if(pStart) saveProfile({match_score_h:0,match_score_a:0,match_acertos:0,match_erros:0,match_active:true,match_cooldowns:'{}'})
     cdRef.current = {penalti:0,falta:0,auto:0,escanteio:0}
     setCooldowns({penalti:0,falta:0,auto:0,escanteio:0})
-    if (matchRef.current) clearInterval(matchRef.current)
-    matchRef.current = setInterval(tickMatch, 1000)
+    if (matchRef.current) { clearInterval(matchRef.current); matchRef.current = null }
+    const intervalId = setInterval(tickMatch, 1000)
+    matchRef.current = intervalId
   }
 
   const tickMatch = useCallback(() => {
@@ -567,14 +577,19 @@ export default function FutmApp() {
           const p = profileRef.current
           if(p) {
             const prize = h>a ? Math.floor(50000*(1+(p.attr_forca-50)/100)) : 10000
+            const currentMoney = p.money || 0
             saveProfile({
-              money: (p.money||0)+prize,
+              money: currentMoney + prize,
               match_active: false,
               match_score_h: 0,
               match_score_a: 0,
               match_acertos: 0,
               match_erros: 0,
-            }).then(() => loadRanking())
+              match_cooldowns: '{}',
+            }).then(() => {
+              loadRanking()
+              if(prize > 0) addFeedItem(`💰 +R$ ${prize.toLocaleString()} pelo resultado!`,'f')
+            })
           }
           return a
         }); return h })
@@ -610,6 +625,9 @@ export default function FutmApp() {
     const cd = Math.max(10, baseCds[type] - stamBonus*2)
     cdRef.current[type] = cd
     setCooldowns({...cdRef.current})
+    // persist cooldowns so refresh restores them
+    const cds = cdRef.current
+    saveProfile({match_cooldowns: JSON.stringify(cds), match_active: true})
     if(hit){
       setAcertos(a=>a+1); setScoreH(h=>h+1)
       addFeedItem(pick(SHOOT_MSGS.hit),'g')

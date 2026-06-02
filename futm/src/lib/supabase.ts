@@ -25,4 +25,5 @@ export type Profile = {
   match_acertos: number
   match_erros: number
   match_active: boolean
+  match_cooldowns: string
 }
