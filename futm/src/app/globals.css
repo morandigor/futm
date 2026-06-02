@@ -1,0 +1,15 @@
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --g:#00D68F;--g2:#00A86B;--g3:#007A4D;
+  --amber:#FFB830;--red:#FF4757;
+  --bg:#0A0F0D;--bg2:#111A14;--bg3:#162019;
+  --card:#1A2620;--card2:#1F2E28;
+  --border:#2A3D33;--border2:#3A5244;
+  --txt:#E8F5EE;--txt2:#8BA898;--txt3:#4D6659;
+  --font:'Barlow Condensed',sans-serif;
+  --body:'Barlow',sans-serif;
+}
+html,body{height:100%;background:var(--bg);color:var(--txt);font-family:var(--body)}
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:var(--bg2)}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
