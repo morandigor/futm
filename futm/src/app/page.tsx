@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase, type Profile } from '@/lib/supabase'
 
-type Page = 'home'|'match'|'drills'|'ranking'|'shop'|'calendar'|'profile'
+type Page = 'home'|'match'|'drills'|'ranking'|'shop'|'calendar'|'profile'|'standings'
 type RankEntry = { username: string; team: string; goals_season: number; goals_today: number; position: number }
 
 const TEAMS = [
@@ -26,6 +26,30 @@ const TEAMS = [
   {id:'mirassol',name:'Mirassol',abbr:'MIR',primary:'#FFD700',secondary:'#111111'},
   {id:'remo',name:'Remo',abbr:'REM',primary:'#0033CC',secondary:'#FFFFFF'},
   {id:'chapecoense',name:'Chapecoense',abbr:'CHP',primary:'#006400',secondary:'#FFFFFF'},
+]
+
+// Standings data — baseado no Brasileirão 2026 (atualizado rodada 13)
+const STANDINGS = [
+  {id:'palmeiras',pts:32,j:13,v:10,e:2,d:1,gp:23,gc:10},
+  {id:'flamengo',pts:26,j:12,v:8,e:2,d:2,gp:24,gc:10},
+  {id:'fluminense',pts:26,j:13,v:8,e:2,d:3,gp:23,gc:16},
+  {id:'saopaulo',pts:23,j:13,v:7,e:2,d:4,gp:17,gc:11},
+  {id:'athletico',pts:22,j:13,v:7,e:1,d:5,gp:20,gc:15},
+  {id:'bahia',pts:21,j:12,v:6,e:3,d:3,gp:17,gc:14},
+  {id:'coritiba',pts:19,j:13,v:5,e:4,d:4,gp:15,gc:13},
+  {id:'botafogo',pts:17,j:12,v:5,e:2,d:5,gp:24,gc:24},
+  {id:'bragantino',pts:17,j:13,v:5,e:2,d:6,gp:15,gc:15},
+  {id:'vasco',pts:16,j:13,v:4,e:4,d:5,gp:18,gc:19},
+  {id:'gremio',pts:16,j:13,v:4,e:4,d:5,gp:15,gc:16},
+  {id:'cruzeiro',pts:16,j:13,v:4,e:4,d:5,gp:17,gc:21},
+  {id:'vitoria',pts:15,j:12,v:4,e:3,d:5,gp:12,gc:17},
+  {id:'corinthians',pts:15,j:13,v:3,e:6,d:4,gp:9,gc:11},
+  {id:'atleticomg',pts:14,j:13,v:4,e:2,d:7,gp:14,gc:19},
+  {id:'internacional',pts:14,j:13,v:3,e:5,d:5,gp:12,gc:14},
+  {id:'santos',pts:14,j:13,v:3,e:5,d:5,gp:18,gc:21},
+  {id:'mirassol',pts:9,j:12,v:2,e:3,d:7,gp:13,gc:18},
+  {id:'remo',pts:8,j:13,v:1,e:5,d:7,gp:13,gc:23},
+  {id:'chapecoense',pts:8,j:12,v:1,e:5,d:6,gp:12,gc:24},
 ]
 
 const DRILL_DEFS = [
@@ -77,23 +101,68 @@ function fmtTimer(s: number) {
 }
 function pick(arr: string[]) { return arr[Math.floor(Math.random()*arr.length)] }
 
-function getNextMatchInfo() {
+function getLondonMatchStatus() {
   const now = new Date()
   const londonOffset = isDST(now) ? 1 : 0
-  const londonHour = (now.getUTCHours() + londonOffset) % 24
-  const londonDay = now.getUTCDay()
-  const matchDays = [2, 6]
-  let daysUntil = 0
-  for (let i = 0; i < 8; i++) {
-    const checkDay = (londonDay + i) % 7
-    if (matchDays.includes(checkDay)) {
-      if (i === 0 && londonHour >= 23) continue
-      daysUntil = i; break
+  const londonNow = new Date(now.getTime() + londonOffset * 3600000)
+  const londonDay = londonNow.getUTCDay()   // 0=Sun,1=Mon,2=Tue,...,6=Sat
+  const londonHour = londonNow.getUTCHours()
+  const londonMin = londonNow.getUTCMinutes()
+  const londonSec = londonNow.getUTCSeconds()
+  const matchDays = [2, 6] // Tue, Sat
+  const MATCH_HOUR = 23    // 23:00 London = 19:00 Brasilia
+
+  // Is a match running right now? (match day + between 23:00 and 00:30)
+  const minutesSinceMidnight = londonHour * 60 + londonMin
+  const matchStart = MATCH_HOUR * 60
+  const matchEnd = matchStart + 90 // 90 minutes
+  const isMatchDay = matchDays.includes(londonDay)
+  const isMatchTime = isMatchDay && minutesSinceMidnight >= matchStart && minutesSinceMidnight < matchEnd
+
+  // Seconds elapsed since match started (for auto-start timer sync)
+  const elapsedSecs = isMatchTime ? (minutesSinceMidnight - matchStart) * 60 + londonSec : 0
+
+  // Seconds until next match
+  let secsUntil = 0
+  if (!isMatchTime) {
+    let found = false
+    for (let i = 0; i < 8 && !found; i++) {
+      const checkDay = (londonDay + i) % 7
+      if (matchDays.includes(checkDay)) {
+        if (i === 0 && minutesSinceMidnight >= matchEnd) continue
+        if (i === 0 && minutesSinceMidnight < matchStart) {
+          secsUntil = (matchStart - minutesSinceMidnight) * 60 - londonSec
+        } else {
+          const minsToday = i === 0 ? 0 : (24 * 60 - minutesSinceMidnight)
+          const minsFromMidnight = i === 0 ? 0 : (i - 1) * 24 * 60
+          secsUntil = minsToday * 60 + minsFromMidnight * 60 + matchStart * 60 - londonSec
+          if (i > 0) secsUntil = ((24 * i - (londonHour * 60 + londonMin) / 60) * 3600) + (MATCH_HOUR * 3600) - londonSec
+        }
+        found = true
+      }
     }
   }
+
   const labels = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb']
-  const nextDay = (londonDay + daysUntil) % 7
-  return { label: daysUntil === 0 ? 'Hoje' : daysUntil === 1 ? 'Amanhã' : labels[nextDay] }
+  let label = 'Em breve'
+  if (isMatchTime) label = 'AO VIVO'
+  else {
+    for (let i = 0; i < 8; i++) {
+      const checkDay = (londonDay + i) % 7
+      if (matchDays.includes(checkDay)) {
+        if (i === 0 && minutesSinceMidnight >= matchEnd) continue
+        label = i === 0 ? 'Hoje' : i === 1 ? 'Amanhã' : labels[checkDay]
+        break
+      }
+    }
+  }
+
+  return { isMatchTime, elapsedSecs, secsUntil, label, londonHour, londonMin }
+}
+
+function getNextMatchInfo() {
+  const s = getLondonMatchStatus()
+  return { label: s.label }
 }
 
 function isDST(date: Date) {
@@ -295,9 +364,12 @@ export default function FutmApp() {
   // keep profileRef in sync
   useEffect(() => { profileRef.current = profile }, [profile])
 
-  function pickOpponent(teamId: string) {
+  function pickOpponent(teamId: string, username: string = '') {
     const others = TEAMS.filter(t => t.id !== teamId)
-    return others[Math.floor(Math.random() * others.length)]
+    // Deterministic: same opponent all week for same user
+    const week = Math.floor(Date.now() / (7 * 24 * 60 * 60 * 1000))
+    const seed = (username.split('').reduce((a,c) => a + c.charCodeAt(0), 0) + week) % others.length
+    return others[seed]
   }
 
   async function doLogin() {
@@ -333,6 +405,35 @@ export default function FutmApp() {
     return () => subscription.unsubscribe()
   }, [])
 
+  // Auto-start match at scheduled time
+  useEffect(() => {
+    if (!loggedIn) return
+    const checkAndStart = () => {
+      const status = getLondonMatchStatus()
+      if (status.isMatchTime && !matchRef.current) {
+        // Match should be running — start it synced to London time
+        const elapsed = status.elapsedSecs
+        const remaining = Math.max(0, 5400 - elapsed)
+        if (remaining > 0) {
+          const p = profileRef.current
+          const opp = pickOpponent(p?.team || 'palmeiras', p?.username || '')
+          setOpponent(opp)
+          setMatchRunning(true)
+          setMatchTime(remaining)
+          setMatchPhase(elapsed < 2700 ? '1º Tempo' : elapsed < 3000 ? 'Intervalo' : '2º Tempo')
+          setFeed([{msg:'⚽ Partida em andamento! Você entrou no jogo.',cls:'f'}])
+          cdRef.current = {penalti:0,falta:0,auto:0,escanteio:0}
+          setCooldowns({penalti:0,falta:0,auto:0,escanteio:0})
+          matchRef.current = setInterval(tickMatch, 1000)
+        }
+      }
+    }
+    checkAndStart()
+    // check every 30s in case user opens app during match
+    const iv = setInterval(checkAndStart, 30000)
+    return () => clearInterval(iv)
+  }, [loggedIn])
+
   async function loadProfile(userId: string) {
     const { data } = await supabase.from('profiles').select('*').eq('id',userId).single()
     if (data) {
@@ -340,7 +441,7 @@ export default function FutmApp() {
       setDrillsDone(data.drills_done||[])
       setLoggedIn(true)
       // pick opponent different from player's team
-      setOpponent(pickOpponent(data.team || 'palmeiras'))
+      setOpponent(pickOpponent(data.team || 'palmeiras', data.username || ''))
       loadRanking()
     }
   }
@@ -359,7 +460,7 @@ export default function FutmApp() {
   function startMatch() {
     if (matchRunning) return
     const p = profileRef.current
-    const opp = pickOpponent(p?.team || 'palmeiras')
+    const opp = pickOpponent(p?.team || 'palmeiras', p?.username || '')
     setOpponent(opp)
     setMatchRunning(true); setMatchTime(5400)
     setScoreH(0); setScoreA(0); setAcertos(0); setErros(0)
@@ -391,11 +492,11 @@ export default function FutmApp() {
         setScoreH(h=>{ setScoreA(a=>{
           const r=h>a?'Vitória! 🏆':h<a?'Derrota. 😔':'Empate.'
           addFeedItem('Fim! '+r+' Placar: '+h+' × '+a,h>=a?'g':'m')
-          // save match result — goals persist, attrs persist
+          // goals already saved per-shot — just save prize money
           const p = profileRef.current
           if(p) {
             const prize = h>a ? Math.floor(50000*(1+(p.attr_forca-50)/100)) : 10000
-            saveProfile({ goals_today: p.goals_today+h, goals_season: p.goals_season+h, money: (p.money||0)+prize })
+            saveProfile({ money: (p.money||0)+prize })
               .then(() => loadRanking())
           }
           return a
@@ -430,8 +531,14 @@ export default function FutmApp() {
     if(hit){
       setAcertos(a=>a+1); setScoreH(h=>h+1)
       addFeedItem(pick(SHOOT_MSGS.hit),'g')
-      // save each goal immediately so logout doesn't lose it
-      await saveProfile({ acertos:p.acertos+1 })
+      // save each goal immediately to DB — ranking updates in real time
+      const updates = {
+        acertos: p.acertos+1,
+        goals_today: p.goals_today+1,
+        goals_season: p.goals_season+1,
+      }
+      await saveProfile(updates)
+      loadRanking()
     } else {
       setErros(e=>e+1); addFeedItem(pick(SHOOT_MSGS.miss),'m')
       await saveProfile({ erros:p.erros+1 })
@@ -440,6 +547,7 @@ export default function FutmApp() {
 
   // DRILLS
   function openDrill(d: typeof DRILL_DEFS[0]) {
+    if (matchRunning) { notify('Não é possível treinar durante uma partida!'); return }
     setActiveDrill(d); setDrillRounds(0); setDrillScore(0); setDrillResult('')
     const refl = profileRef.current?.attr_refl||50
     startMarker(refl)
@@ -621,7 +729,7 @@ export default function FutmApp() {
 
   const navItems:[Page,string,string][]=[
     ['home','ti-home','Início'],['match','ti-ball-football','Partida'],['drills','ti-run','Drills'],
-    ['ranking','ti-trophy','Ranking'],['shop','ti-shopping-bag','Loja'],['calendar','ti-calendar','Calendário'],['profile','ti-user','Perfil'],
+    ['ranking','ti-trophy','Ranking'],['standings','ti-table','Tabela'],['shop','ti-shopping-bag','Loja'],['calendar','ti-calendar','Calendário'],['profile','ti-user','Perfil'],
   ]
 
   return(
@@ -667,7 +775,7 @@ export default function FutmApp() {
                 {lbl:'Gols hoje',val:p?.goals_today||0,c:'var(--g)'},
                 {lbl:'Temporada',val:p?.goals_season||0,c:'var(--txt)'},
                 {lbl:'Saldo',val:`R$${Math.floor((p?.money||0)/1000)}k`,c:'var(--txt)'},
-                {lbl:'Próx. partida',val:nextMatch.label,c:'var(--amber)'},
+                {lbl:'Próx. partida',val:nextMatch.label,c:nextMatch.label==='AO VIVO'?'var(--g)':'var(--amber)'},
               ].map(s=>(
                 <div key={s.lbl} style={{background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:10,padding:12}}>
                   <div style={{fontFamily:'var(--font)',fontSize:9,color:'var(--txt2)',letterSpacing:'.8px',textTransform:'uppercase',marginBottom:4}}>{s.lbl}</div>
@@ -789,12 +897,17 @@ export default function FutmApp() {
           <div>
             <div style={{fontFamily:'var(--font)',fontSize:24,fontWeight:800,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Drills de treino</div>
             <div style={{fontSize:12,color:'var(--txt2)',marginBottom:14}}>Atributos sobem permanentemente até 99. Quanto mais alto, melhor no jogo.</div>
+            {matchRunning&&(
+              <div style={{background:'rgba(255,184,48,.1)',border:'1px solid rgba(255,184,48,.3)',borderRadius:8,padding:'10px 14px',marginBottom:14,fontSize:12,color:'var(--amber)',display:'flex',alignItems:'center',gap:8}}>
+                <i className="ti ti-alert-triangle"/> Partida em andamento! Os drills ficam disponíveis após o apito final.
+              </div>
+            )}
             <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:8,marginBottom:12}}>
               {DRILL_DEFS.map(d=>{
                 const count=drillsDone.filter(x=>x===d.id).length, done=count>=d.limit
                 return(
                   <div key={d.id}
-                    onClick={()=>{ if(!done) openDrill(d) }}
+                    onPointerUp={(e)=>{ e.stopPropagation(); if(!done) openDrill(d) }}
                     style={{background:'var(--card)',border:`1px solid ${done?'var(--border)':'var(--border2)'}`,borderRadius:12,
                       cursor:done?'not-allowed':'pointer',transition:'all .15s',textAlign:'center',overflow:'hidden',opacity:done?.5:1,
                       userSelect:'none'}}>
@@ -1015,6 +1128,58 @@ export default function FutmApp() {
                 <AttrBar val={p?.attr_refl||50} label="Reflexo"/>
               </Card>
             </div>
+          </div>
+        )}
+
+        {/* TABELA DO BRASILEIRÃO */}
+        {page==='standings'&&(
+          <div>
+            <div style={{fontFamily:'var(--font)',fontSize:24,fontWeight:800,letterSpacing:1,textTransform:'uppercase',marginBottom:16}}>Tabela do Brasileirão</div>
+            <Card style={{padding:0,overflow:'hidden'}}>
+              <div style={{overflowX:'auto'}}>
+                <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+                  <thead>
+                    <tr style={{background:'var(--bg2)',borderBottom:'1px solid var(--border)'}}>
+                      {['#','Time','P','J','V','E','D','GP','GC','SG'].map(h=>(
+                        <th key={h} style={{padding:'10px 8px',textAlign:h==='Time'?'left':'center',fontFamily:'var(--font)',fontSize:10,fontWeight:700,color:'var(--txt2)',letterSpacing:'.5px',textTransform:'uppercase',whiteSpace:'nowrap'}}>
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {STANDINGS.map((s,i)=>{
+                      const t = TEAMS.find(t=>t.id===s.id)||TEAMS[0]
+                      const isPlayer = t.id === p?.team
+                      return(
+                        <tr key={s.id} style={{borderBottom:'1px solid var(--border)',background:isPlayer?'rgba(0,214,143,.06)':'transparent'}}>
+                          <td style={{padding:'8px',textAlign:'center',fontFamily:'var(--font)',fontWeight:700,color:i<4?'var(--g)':i<6?'#60A5FA':i>16?'var(--red)':'var(--txt2)',width:32}}>{i+1}</td>
+                          <td style={{padding:'8px 8px 8px 4px',minWidth:140}}>
+                            <div style={{display:'flex',alignItems:'center',gap:8}}>
+                              <MiniShirt primary={t.primary} secondary={t.secondary} size={22}/>
+                              <span style={{fontFamily:'var(--font)',fontWeight:isPlayer?700:500,color:isPlayer?'var(--g)':'var(--txt)',letterSpacing:'.3px'}}>{t.name}</span>
+                            </div>
+                          </td>
+                          <td style={{padding:'8px',textAlign:'center',fontFamily:'var(--font)',fontWeight:800,color:'var(--g)'}}>{s.pts}</td>
+                          <td style={{padding:'8px',textAlign:'center',color:'var(--txt2)'}}>{s.j}</td>
+                          <td style={{padding:'8px',textAlign:'center',color:'var(--g)'}}>{s.v}</td>
+                          <td style={{padding:'8px',textAlign:'center',color:'var(--amber)'}}>{s.e}</td>
+                          <td style={{padding:'8px',textAlign:'center',color:'var(--red)'}}>{s.d}</td>
+                          <td style={{padding:'8px',textAlign:'center',color:'var(--txt2)'}}>{s.gp}</td>
+                          <td style={{padding:'8px',textAlign:'center',color:'var(--txt2)'}}>{s.gc}</td>
+                          <td style={{padding:'8px',textAlign:'center',color:s.gp-s.gc>0?'var(--g)':s.gp-s.gc<0?'var(--red)':'var(--txt2)',fontWeight:700}}>{s.gp-s.gc>0?'+':''}{s.gp-s.gc}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div style={{padding:'10px 12px',borderTop:'1px solid var(--border)',display:'flex',gap:16,fontSize:10,color:'var(--txt2)',flexWrap:'wrap'}}>
+                <span><span style={{display:'inline-block',width:10,height:10,background:'rgba(0,214,143,.3)',borderRadius:2,marginRight:4}}/>Libertadores (1-4)</span>
+                <span><span style={{display:'inline-block',width:10,height:10,background:'rgba(96,165,250,.3)',borderRadius:2,marginRight:4}}/>Sul-Americana (5-6)</span>
+                <span><span style={{display:'inline-block',width:10,height:10,background:'rgba(255,71,87,.3)',borderRadius:2,marginRight:4}}/>Rebaixamento (18-20)</span>
+              </div>
+            </Card>
           </div>
         )}
 
